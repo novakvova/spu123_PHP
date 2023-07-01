@@ -31,6 +31,7 @@ const CategoryListPage = () => {
                         <th>Назва</th>
                         <th>Фото</th>
                         <th>Опис</th>
+                        <td></td>
                     </tr>
                     </thead>
                     <tbody>

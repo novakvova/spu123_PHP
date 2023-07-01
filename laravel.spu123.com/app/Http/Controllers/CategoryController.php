@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Category;
+use Intervention\Image\Facades\Image;
 use Validator;
 use Illuminate\Http\Request;
 
@@ -32,7 +33,7 @@ class CategoryController extends Controller
      *                 required={},
      *                 @OA\Property(
      *                     property="image",
-     *                     type="string"
+     *                     type="file"
      *                 ),
      *                 @OA\Property(
      *                     property="name",
@@ -60,11 +61,32 @@ class CategoryController extends Controller
             'image'=>'required',
             'description'=>'required',
         ],$message);
+
         if($validation->fails()){
             return response()->json($validation->errors(), 400,
                 ['Content-Type' => 'application/json;charset=UTF-8', 'Charset' => 'utf-8'], JSON_UNESCAPED_UNICODE);
         }
 
+        if ($request->hasFile('image')) {
+            $image = $request->file('image');
+            // Generate a unique filename - Генеруємо ім'я файлу - рандомом.
+            $filename = uniqid() . '.' . $image->getClientOriginalExtension();
+            $sizes = [50, 150, 300, 600, 1200]; //розміри фото, яке буде зберігатися
+            foreach ($sizes as $size) //перебирамєо масив $sizes - на кожні ітерації получаємо значення в $size
+            {
+                $fileSave = $size.'_'.$filename; //ім'я файлу яке зберігаємо в файловій системі.
+                // створуємо фото із розміром 50, 150, ... при цьому зберігаємо пропорції по висоті
+                $resizedImage = Image::make($image)->resize($size, null, function ($constraint) {
+                    $constraint->aspectRatio(); //збереження пропорцій відносно ширини
+                })->encode(); //отримуємо фото в байтах
+                // Save the resized image
+                $path = public_path('uploads/' . $fileSave); //отримали фізичний шлях куди збережемо фото
+                file_put_contents($path, $resizedImage); //зберігаємо фото
+            }
+            //після збережння усіх фото вказуємо назву фото для БД
+            $input['image'] = $filename;
+        }
+        //зберігаємо категорі юв БД
         $category = Category::create($input);
         return response()->json($category, 201,
             ['Content-Type' => 'application/json;charset=UTF-8', 'Charset' => 'utf-8'], JSON_UNESCAPED_UNICODE);
@@ -120,7 +142,7 @@ class CategoryController extends Controller
      *                 required={"name"},
      *                 @OA\Property(
      *                     property="image",
-     *                     type="string"
+     *                     type="file"
      *                 ),
      *                 @OA\Property(
      *                     property="name",
@@ -141,17 +163,47 @@ class CategoryController extends Controller
         $input = $request->all();
         $message = array(
             'name.required'=>'Вкажіть назву категорії',
-            'image.required'=>'Вкажіть фото категорії',
             'description.required'=>'Вкажіть опис категорії'
         );
         $validation = Validator::make($input,[
             'name'=>'required',
-            'image'=>'required',
             'description'=>'required',
         ],$message);
         if($validation->fails()){
             return response()->json($validation->errors(), 400,
                 ['Content-Type' => 'application/json;charset=UTF-8', 'Charset' => 'utf-8'], JSON_UNESCAPED_UNICODE);
+        }
+
+
+        if ($request->hasFile('image')) {
+            $image = $request->file('image');
+            // Generate a unique filename
+            $filename = uniqid() . '.' . $image->getClientOriginalExtension();
+            $sizes = [50, 150, 300, 600, 1200];
+            //remove old images
+            foreach ($sizes as $size) {
+                $fileDelete = $size.'_'.$category->image;
+                $removePath = public_path('uploads/' . $fileDelete);
+                if (file_exists($removePath)) {
+                    unlink($removePath);
+                }
+            }
+
+            foreach ($sizes as $size)
+            {
+                $fileSave = $size.'_'.$filename;
+                // Resize the image while maintaining aspect ratio
+                $resizedImage = Image::make($image)->resize($size, null, function ($constraint) {
+                    $constraint->aspectRatio();
+                })->encode();
+                // Save the resized image
+                $path = public_path('uploads/' . $fileSave);
+                file_put_contents($path, $resizedImage);
+            }
+            $input['image'] = $filename;
+        }
+        else {
+            $input['image'] = $category->image;
         }
         $category->update($input);
         return response()->json($category, 200,
@@ -192,6 +244,4 @@ class CategoryController extends Controller
         return response()->json("delete", 204,
             ['Content-Type' => 'application/json;charset=UTF-8', 'Charset' => 'utf-8'], JSON_UNESCAPED_UNICODE);
     }
-
-
 }
